@@ -25,7 +25,7 @@ pip install -r requirements.txt
 - edit .env contents to fit your setup
 
 ### Permissions
-- since ACC is only available on Windows, make sure the python script can access the .exe file of the server
+- since the ACC server is only available on Windows as far as I know, make sure the python script can access the .exe file of the server
 
 ## Usage
 
