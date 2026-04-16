@@ -44,6 +44,14 @@ python main.py
 The dashboard will be available at the configured address in your `.env` file.
 Default: http://localhost:8080
 
+### Autostarting the dashboard on startup
+- Press WIN + R on your keyboard or just open up "run"
+- type shell:startup
+- create a shortcut for "start_dashboard.vbs" in the startup folder
+
+The dashboard will now autostart when windows boots. 
+
+
 ### Managing Your Server
 
 Once logged in, you can:
