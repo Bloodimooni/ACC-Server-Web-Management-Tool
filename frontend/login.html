@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ACC Server — Login</title>
+  <link rel="icon" href="https://assettocorsa.gg/wp-content/themes/fosfoblockbase/assets/build/img/ACC-logo.svg" type="image/svg+xml">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    select option { background-color: #1f2937; color: #ffffff; }
+  </style>
+</head>
+<body class="bg-gray-950 min-h-screen flex items-center justify-center p-4">
+
+  <div class="w-full max-w-sm" x-data="loginPage()" x-init="init()">
+
+    <!-- Header -->
+    <div class="text-center mb-8">
+      <img src="https://assettocorsa.gg/wp-content/themes/fosfoblockbase/assets/build/img/ACC-logo.svg"
+           alt="Assetto Corsa Competizione"
+           class="h-16 mx-auto mb-5 drop-shadow-lg">
+      <p class="text-gray-500 text-sm">Management Dashboard</p>
+    </div>
+
+    <!-- Card -->
+    <div class="bg-gray-900 border border-gray-800 rounded-2xl p-8 shadow-2xl">
+
+      <!-- Error -->
+      <div x-show="hasError" x-cloak
+        class="mb-5 flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+        <svg class="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+        </svg>
+        Invalid username or password.
+      </div>
+
+      <!-- Local login form -->
+      <form action="/auth/login" method="post" class="space-y-4">
+        <div>
+          <label class="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">Username</label>
+          <input type="text" name="username" required autocomplete="username"
+            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm
+                   placeholder-gray-600 focus:outline-none focus:border-[#e20613] focus:ring-1 focus:ring-[#e20613]/40 transition">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">Password</label>
+          <input type="password" name="password" required autocomplete="current-password"
+            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm
+                   placeholder-gray-600 focus:outline-none focus:border-[#e20613] focus:ring-1 focus:ring-[#e20613]/40 transition">
+        </div>
+        <button type="submit"
+          class="w-full bg-[#e20613] hover:bg-red-600 active:bg-red-800 text-white font-semibold
+                 text-sm py-2.5 rounded-lg transition-colors mt-2">
+          Sign In
+        </button>
+      </form>
+
+      <!-- OIDC button -->
+      <template x-if="oidcEnabled">
+        <div>
+          <div class="relative my-5">
+            <div class="absolute inset-0 flex items-center">
+              <div class="w-full border-t border-gray-800"></div>
+            </div>
+            <div class="relative flex justify-center">
+              <span class="bg-gray-900 px-3 text-xs text-gray-600">or continue with</span>
+            </div>
+          </div>
+          <a href="/auth/oidc/login"
+            class="flex items-center justify-center gap-2 w-full bg-gray-800 hover:bg-gray-700
+                   border border-gray-700 text-white text-sm font-medium py-2.5 rounded-lg transition-colors">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
+            </svg>
+            Sign in with Authentik
+          </a>
+        </div>
+      </template>
+
+    </div>
+  </div>
+
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script>
+    function loginPage() {
+      return {
+        hasError: new URLSearchParams(location.search).get('error') === '1',
+        oidcEnabled: false,
+        async init() {
+          try {
+            const r = await fetch('/auth/providers');
+            const d = await r.json();
+            this.oidcEnabled = d.oidc_enabled;
+          } catch {}
+        }
+      };
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ACC Server Dashboard</title>
+  <link rel="icon" href="https://assettocorsa.gg/wp-content/themes/fosfoblockbase/assets/build/img/ACC-logo.svg" type="image/svg+xml">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    [x-cloak] { display: none !important; }
+    .console-output { font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace; }
+
+    /* Fix dropdown option visibility on Windows (native select ignores Tailwind text-white on options) */
+    select option { background-color: #1f2937; color: #ffffff; }
+
+    /* ACC red focus rings & accents */
+    input[type=range]::-webkit-slider-thumb { background: #e20613; }
+    input[type=range]::-moz-range-thumb     { background: #e20613; border: none; }
+    input[type=range]::-webkit-slider-runnable-track { background: #374151; border-radius: 4px; }
+
+    .field-label  { display: block; font-size: 0.75rem; font-weight: 500; color: #9ca3af;
+                    margin-bottom: 0.375rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .field-input  { background: #1f2937; border: 1px solid #374151; border-radius: 0.5rem;
+                    padding: 0.5rem 0.75rem; color: #ffffff; font-size: 0.875rem; width: 100%;
+                    outline: none; transition: border-color 0.15s, box-shadow 0.15s; }
+    .field-input:focus  { border-color: #e20613; box-shadow: 0 0 0 2px rgba(226,6,19,0.25); }
+    .field-select { background: #1f2937; border: 1px solid #374151; border-radius: 0.5rem;
+                    padding: 0.5rem 0.75rem; color: #ffffff; font-size: 0.875rem; width: 100%;
+                    outline: none; transition: border-color 0.15s, box-shadow 0.15s; }
+    .field-select:focus { border-color: #e20613; box-shadow: 0 0 0 2px rgba(226,6,19,0.25); }
+    .field-hint   { font-size: 0.75rem; color: #4b5563; margin-top: 0.25rem; }
+
+    input[type=checkbox] { accent-color: #e20613; }
+  </style>
+</head>
+<body class="bg-gray-950 text-gray-200 min-h-screen" x-data="dashboard()" x-init="init()" x-cloak>
+
+  <!-- Toast notification -->
+  <div x-show="toast.visible" x-cloak x-transition
+    class="fixed top-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl border text-sm font-medium"
+    :class="toast.type === 'success'
+      ? 'bg-[#e20613]/10 border-[#e20613]/30 text-[#e20613]'
+      : 'bg-red-900/30 border-red-700/50 text-red-300'">
+    <svg x-show="toast.type === 'success'" class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+      <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+    </svg>
+    <svg x-show="toast.type === 'error'" class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+    </svg>
+    <span x-text="toast.message"></span>
+  </div>
+
+  <!-- Top bar -->
+  <header class="bg-black border-b border-gray-800 px-6 py-3 flex items-center justify-between sticky top-0 z-40">
+    <img src="https://assettocorsa.gg/wp-content/themes/fosfoblockbase/assets/build/img/ACC-logo.svg"
+         alt="Assetto Corsa Competizione"
+         class="h-7">
+    <div class="flex items-center gap-4">
+      <!-- Server status pill -->
+      <div class="flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-semibold"
+        :class="server.running
+          ? 'bg-[#e20613]/10 border-[#e20613]/40 text-[#e20613]'
+          : 'bg-gray-800 border-gray-700 text-gray-500'">
+        <span class="w-1.5 h-1.5 rounded-full"
+          :class="server.running ? 'bg-[#e20613] animate-pulse' : 'bg-gray-600'"></span>
+        <span x-text="server.running ? 'Running' : 'Stopped'"></span>
+        <span x-show="server.running && server.uptime > 0" x-text="'· ' + formatUptime(server.uptime)" class="text-gray-500"></span>
+      </div>
+      <a href="/auth/logout"
+        class="text-xs text-gray-500 hover:text-gray-300 transition flex items-center gap-1.5">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+        </svg>
+        Logout
+      </a>
+    </div>
+  </header>
+
+  <!-- Tab navigation -->
+  <nav class="bg-black border-b border-gray-800 px-6 flex gap-1 sticky top-[57px] z-30">
+    <template x-for="t in tabs" :key="t.id">
+      <button @click="tab = t.id"
+        class="px-4 py-3 text-sm font-medium border-b-2 transition-colors -mb-px"
+        :class="tab === t.id
+          ? 'border-[#e20613] text-[#e20613]'
+          : 'border-transparent text-gray-500 hover:text-gray-300'">
+        <span x-text="t.label"></span>
+      </button>
+    </template>
+  </nav>
+
+  <!-- Main content -->
+  <main class="max-w-4xl mx-auto px-6 py-8">
+
+    <!-- ================================================================ -->
+    <!-- DASHBOARD TAB                                                      -->
+    <!-- ================================================================ -->
+    <section x-show="tab === 'dashboard'">
+      <h2 class="text-lg font-semibold text-white mb-6">Server Control</h2>
+
+      <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6 mb-6">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-xs text-gray-500 uppercase tracking-wider mb-1">Status</p>
+            <p class="text-2xl font-bold"
+              :class="server.running ? 'text-[#e20613]' : 'text-gray-500'"
+              x-text="server.running ? 'Online' : 'Offline'"></p>
+            <p x-show="server.running" class="text-sm text-gray-500 mt-1">
+              PID <span class="text-gray-300 font-mono" x-text="server.pid"></span>
+              &nbsp;·&nbsp; up <span x-text="formatUptime(server.uptime)"></span>
+              <span x-show="server.adopted" class="ml-2 text-yellow-500 text-xs">(adopted)</span>
+            </p>
+          </div>
+          <div class="flex gap-3">
+            <button @click="serverAction('start')"
+              :disabled="server.running || actionLoading"
+              class="px-5 py-2 bg-[#e20613] hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed
+                     text-white text-sm font-semibold rounded-lg transition-colors">
+              Start
+            </button>
+            <button @click="serverAction('restart')"
+              :disabled="!server.running || actionLoading"
+              class="px-5 py-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed
+                     text-white text-sm font-semibold rounded-lg transition-colors">
+              Restart
+            </button>
+            <button @click="serverAction('stop')"
+              :disabled="!server.running || actionLoading"
+              class="px-5 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 disabled:opacity-40 disabled:cursor-not-allowed
+                     text-white text-sm font-semibold rounded-lg transition-colors">
+              Stop
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick info cards -->
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <p class="text-xs text-gray-500 uppercase tracking-wider mb-1">Server Name</p>
+          <p class="text-sm text-white font-medium truncate" x-text="cfg.settings?.serverName || '—'"></p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <p class="text-xs text-gray-500 uppercase tracking-wider mb-1">Car Group</p>
+          <p class="text-sm text-white font-medium" x-text="cfg.settings?.carGroup || '—'"></p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <p class="text-xs text-gray-500 uppercase tracking-wider mb-1">Track</p>
+          <p class="text-sm text-white font-medium" x-text="trackName(cfg.event?.track) || '—'"></p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <p class="text-xs text-gray-500 uppercase tracking-wider mb-1">Max Slots</p>
+          <p class="text-sm text-white font-medium" x-text="cfg.settings?.maxCarSlots ?? '—'"></p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <p class="text-xs text-gray-500 uppercase tracking-wider mb-1">UDP Port</p>
+          <p class="text-sm text-white font-medium" x-text="cfg.configuration?.udpPort ?? '—'"></p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <p class="text-xs text-gray-500 uppercase tracking-wider mb-1">Sessions</p>
+          <p class="text-sm text-white font-medium" x-text="(cfg.event?.sessions?.length ?? 0) + ' session(s)'"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================ -->
+    <!-- NETWORK TAB                                                        -->
+    <!-- ================================================================ -->
+    <section x-show="tab === 'network'">
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-lg font-semibold text-white">Network Configuration</h2>
+        <button @click="saveConfig('configuration')" :disabled="saving.configuration"
+          class="px-5 py-2 bg-[#e20613] hover:bg-red-600 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors">
+          <span x-text="saving.configuration ? 'Saving…' : 'Save'"></span>
+        </button>
+      </div>
+      <template x-if="cfg.configuration">
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl divide-y divide-gray-800">
+          <div class="grid grid-cols-2 gap-6 p-6">
+            <div>
+              <label class="field-label">UDP Port</label>
+              <input type="number" x-model.number="cfg.configuration.udpPort" min="1024" max="65535" class="field-input">
+              <p class="field-hint">Car position streaming &amp; ping</p>
+            </div>
+            <div>
+              <label class="field-label">TCP Port</label>
+              <input type="number" x-model.number="cfg.configuration.tcpPort" min="1024" max="65535" class="field-input">
+              <p class="field-hint">Client connection establishment</p>
+            </div>
+          </div>
+          <div class="p-6">
+            <label class="field-label">Max Connections</label>
+            <input type="number" x-model.number="cfg.configuration.maxConnections" min="1" max="200" class="field-input w-40">
+            <p class="field-hint">Total simultaneous TCP connections allowed</p>
+          </div>
+          <div class="p-6 flex flex-col gap-4">
+            <label class="flex items-center gap-3 cursor-pointer select-none">
+              <input type="checkbox" :checked="cfg.configuration.lanDiscovery === 1"
+                @change="cfg.configuration.lanDiscovery = $event.target.checked ? 1 : 0">
+              <div>
+                <span class="text-sm text-white font-medium">LAN Discovery</span>
+                <p class="text-xs text-gray-500">Broadcast server presence on local network</p>
+              </div>
+            </label>
+            <label class="flex items-center gap-3 cursor-pointer select-none">
+              <input type="checkbox" :checked="cfg.configuration.registerToLobby === 1"
+                @change="cfg.configuration.registerToLobby = $event.target.checked ? 1 : 0">
+              <div>
+                <span class="text-sm text-white font-medium">Register to Public Lobby</span>
+                <p class="text-xs text-gray-500">Make server visible in the official server list</p>
+              </div>
+            </label>
+          </div>
+        </div>
+      </template>
+      <div x-show="!cfg.configuration" class="text-gray-500 text-sm">Loading…</div>
+    </section>
+
+    <!-- ================================================================ -->
+    <!-- SETTINGS TAB                                                       -->
+    <!-- ================================================================ -->
+    <section x-show="tab === 'settings'">
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-lg font-semibold text-white">Server Settings</h2>
+        <button @click="saveConfig('settings')" :disabled="saving.settings"
+          class="px-5 py-2 bg-[#e20613] hover:bg-red-600 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors">
+          <span x-text="saving.settings ? 'Saving…' : 'Save'"></span>
+        </button>
+      </div>
+      <template x-if="cfg.settings">
+        <div class="space-y-4">
+
+          <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-5">
+            <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Identity</h3>
+            <div>
+              <label class="field-label">Server Name</label>
+              <input type="text" x-model="cfg.settings.serverName" maxlength="50" class="field-input">
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="field-label">Server Password</label>
+                <input type="text" x-model="cfg.settings.password" class="field-input font-mono">
+                <p class="field-hint">Leave blank for public access</p>
+              </div>
+              <div>
+                <label class="field-label">Spectator Password</label>
+                <input type="text" x-model="cfg.settings.spectatorPassword" class="field-input font-mono">
+              </div>
+            </div>
+            <div>
+              <label class="field-label">Admin Password</label>
+              <input type="text" x-model="cfg.settings.adminPassword" class="field-input font-mono w-64">
+              <p class="field-hint">Used with /admin command in-game</p>
+            </div>
+          </div>
+
+          <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-5">
+            <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Cars &amp; Slots</h3>
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="field-label">Car Group</label>
+                <select x-model="cfg.settings.carGroup" class="field-select">
+                  <option value="FreeForAll">Free For All</option>
+                  <option value="GT3">GT3</option>
+                  <option value="GT4">GT4</option>
+                  <option value="Cup">Cup (Porsche)</option>
+                  <option value="ST">Super Trofeo</option>
+                  <option value="CHL">Challenge</option>
+                  <option value="TCX">TCX</option>
+                </select>
+              </div>
+              <div>
+                <label class="field-label">Max Car Slots</label>
+                <input type="number" x-model.number="cfg.settings.maxCarSlots" min="1" max="60" class="field-input">
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-5">
+            <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Rating Requirements <span class="normal-case text-gray-600 font-normal ml-1">(-1 = disabled)</span></h3>
+            <div class="grid grid-cols-3 gap-4">
+              <div>
+                <label class="field-label">Track Medals</label>
+                <input type="number" x-model.number="cfg.settings.trackMedalsRequirement" min="-1" max="3" class="field-input">
+                <p class="field-hint">0–3 medals or -1</p>
+              </div>
+              <div>
+                <label class="field-label">Safety Rating</label>
+                <input type="number" x-model.number="cfg.settings.safetyRatingRequirement" min="-1" max="99" class="field-input">
+              </div>
+              <div>
+                <label class="field-label">Racecraft Rating</label>
+                <input type="number" x-model.number="cfg.settings.racecraftRatingRequirement" min="-1" max="99" class="field-input">
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-4">
+            <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Race Rules</h3>
+            <div class="grid grid-cols-2 gap-x-8 gap-y-4">
+              <label class="flex items-center gap-3 cursor-pointer select-none">
+                <input type="checkbox" :checked="cfg.settings.isRaceLocked === 1"
+                  @change="cfg.settings.isRaceLocked = $event.target.checked ? 1 : 0">
+                <div>
+                  <span class="text-sm text-white">Race Locked</span>
+                  <p class="text-xs text-gray-500">Prevent joining during active race</p>
+                </div>
+              </label>
+              <label class="flex items-center gap-3 cursor-pointer select-none">
+                <input type="checkbox" :checked="cfg.settings.allowAutoDQ === 1"
+                  @change="cfg.settings.allowAutoDQ = $event.target.checked ? 1 : 0">
+                <div>
+                  <span class="text-sm text-white">Allow Auto DQ</span>
+                  <p class="text-xs text-gray-500">Automatic disqualification</p>
+                </div>
+              </label>
+              <label class="flex items-center gap-3 cursor-pointer select-none">
+                <input type="checkbox" :checked="cfg.settings.shortFormationLap === 1"
+                  @change="cfg.settings.shortFormationLap = $event.target.checked ? 1 : 0">
+                <div>
+                  <span class="text-sm text-white">Short Formation Lap</span>
+                </div>
+              </label>
+              <label class="flex items-center gap-3 cursor-pointer select-none">
+                <input type="checkbox" :checked="cfg.settings.dumpLeaderboards === 1"
+                  @change="cfg.settings.dumpLeaderboards = $event.target.checked ? 1 : 0">
+                <div>
+                  <span class="text-sm text-white">Dump Leaderboards</span>
+                  <p class="text-xs text-gray-500">Write standings to results/</p>
+                </div>
+              </label>
+              <label class="flex items-center gap-3 cursor-pointer select-none">
+                <input type="checkbox" :checked="cfg.settings.doDriverSwapBroadcast === 1"
+                  @change="cfg.settings.doDriverSwapBroadcast = $event.target.checked ? 1 : 0">
+                <div>
+                  <span class="text-sm text-white">Driver Swap Broadcast</span>
+                </div>
+              </label>
+            </div>
+            <div class="grid grid-cols-2 gap-4 pt-2">
+              <div>
+                <label class="field-label">Formation Lap Type</label>
+                <select x-model.number="cfg.settings.formationLapType" class="field-select">
+                  <option value="0">0 — Free</option>
+                  <option value="1">1 — Fixed speed</option>
+                  <option value="3">3 — Position control (default)</option>
+                </select>
+              </div>
+              <div>
+                <label class="field-label">Latency Strategy</label>
+                <select x-model.number="cfg.settings.latencyStrategy" class="field-select">
+                  <option value="0">0 — Standard</option>
+                  <option value="1">1 — Low latency</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </template>
+      <div x-show="!cfg.settings" class="text-gray-500 text-sm">Loading…</div>
+    </section>
+
+    <!-- ================================================================ -->
+    <!-- EVENT TAB                                                          -->
+    <!-- ================================================================ -->
+    <section x-show="tab === 'event'">
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-lg font-semibold text-white">Event Configuration</h2>
+        <button @click="saveConfig('event')" :disabled="saving.event"
+          class="px-5 py-2 bg-[#e20613] hover:bg-red-600 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors">
+          <span x-text="saving.event ? 'Saving…' : 'Save'"></span>
+        </button>
+      </div>
+      <template x-if="cfg.event">
+        <div class="space-y-4">
+
+          <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6">
+            <label class="field-label">Track</label>
+            <select x-model="cfg.event.track" class="field-select max-w-xs">
+              <template x-for="t in tracks" :key="t.id">
+                <option :value="t.id" x-text="t.name"></option>
+              </template>
+            </select>
+          </div>
+
+          <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-5">
+            <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Weather</h3>
+            <div class="grid grid-cols-2 gap-6">
+              <div>
+                <label class="field-label">Ambient Temperature — <span class="text-[#e20613]" x-text="cfg.event.ambientTemp + '°C'"></span></label>
+                <input type="range" x-model.number="cfg.event.ambientTemp" min="0" max="50" class="w-full mt-2">
+              </div>
+              <div>
+                <label class="field-label">Cloud Level — <span class="text-[#e20613]" x-text="Math.round(cfg.event.cloudLevel * 100) + '%'"></span></label>
+                <input type="range" x-model.number="cfg.event.cloudLevel" min="0" max="1" step="0.05" class="w-full mt-2">
+              </div>
+              <div>
+                <label class="field-label">Rain — <span class="text-[#e20613]" x-text="Math.round(cfg.event.rain * 100) + '%'"></span></label>
+                <input type="range" x-model.number="cfg.event.rain" min="0" max="1" step="0.05" class="w-full mt-2">
+              </div>
+              <div>
+                <label class="field-label">Weather Randomness — <span class="text-[#e20613]" x-text="cfg.event.weatherRandomness + '/7'"></span></label>
+                <input type="range" x-model.number="cfg.event.weatherRandomness" min="0" max="7" class="w-full mt-2">
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-4">
+            <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Timing</h3>
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="field-label">Pre-Race Waiting (seconds)</label>
+                <input type="number" x-model.number="cfg.event.preRaceWaitingTimeSeconds" min="0" class="field-input">
+              </div>
+              <div>
+                <label class="field-label">Session Over-time (seconds)</label>
+                <input type="number" x-model.number="cfg.event.sessionOverTimeSeconds" min="0" class="field-input">
+              </div>
+            </div>
+          </div>
+
+          <!-- Sessions -->
+          <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Sessions</h3>
+              <button @click="addSession()"
+                class="text-xs px-3 py-1.5 bg-[#e20613]/15 hover:bg-[#e20613]/25 border border-[#e20613]/30
+                       text-[#e20613] rounded-lg transition-colors font-medium">
+                + Add Session
+              </button>
+            </div>
+            <div class="space-y-3">
+              <template x-for="(s, i) in cfg.event.sessions" :key="i">
+                <div class="bg-gray-800 rounded-xl p-4 flex flex-wrap gap-4 items-end">
+                  <div class="flex-shrink-0">
+                    <label class="field-label">Type</label>
+                    <select x-model="s.sessionType" class="field-select w-28">
+                      <option value="P">Practice</option>
+                      <option value="Q">Qualifying</option>
+                      <option value="R">Race</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="field-label">Duration (min)</label>
+                    <input type="number" x-model.number="s.sessionDurationMinutes" min="1" class="field-input w-28">
+                  </div>
+                  <div>
+                    <label class="field-label">Hour of Day</label>
+                    <input type="number" x-model.number="s.hourOfDay" min="0" max="23" class="field-input w-20">
+                  </div>
+                  <div>
+                    <label class="field-label">Day of Weekend</label>
+                    <select x-model.number="s.dayOfWeekend" class="field-select w-28">
+                      <option value="1">Friday</option>
+                      <option value="2">Saturday</option>
+                      <option value="3">Sunday</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="field-label">Time Mult.</label>
+                    <input type="number" x-model.number="s.timeMultiplier" min="1" max="50" class="field-input w-20">
+                  </div>
+                  <button @click="cfg.event.sessions.splice(i, 1)" x-show="cfg.event.sessions.length > 1"
+                    class="text-gray-600 hover:text-[#e20613] transition-colors mb-0.5 ml-auto flex-shrink-0">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                  </button>
+                </div>
+              </template>
+            </div>
+          </div>
+
+        </div>
+      </template>
+      <div x-show="!cfg.event" class="text-gray-500 text-sm">Loading…</div>
+    </section>
+
+    <!-- ================================================================ -->
+    <!-- RULES TAB                                                          -->
+    <!-- ================================================================ -->
+    <section x-show="tab === 'rules'">
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-lg font-semibold text-white">Event Rules</h2>
+        <button @click="saveConfig('eventRules')" :disabled="saving.eventRules"
+          class="px-5 py-2 bg-[#e20613] hover:bg-red-600 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors">
+          <span x-text="saving.eventRules ? 'Saving…' : 'Save'"></span>
+        </button>
+      </div>
+      <template x-if="cfg.eventRules">
+        <div class="space-y-4">
+
+          <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-5">
+            <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Drivers</h3>
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="field-label">Max Drivers per Car</label>
+                <select x-model.number="cfg.eventRules.maxDriversCount" class="field-select w-40">
+                  <option value="1">1 (single driver)</option>
+                  <option value="2">2 (driver swap)</option>
+                </select>
+              </div>
+              <div>
+                <label class="field-label">Qualify Standing Type</label>
+                <select x-model.number="cfg.eventRules.qualifyStandingType" class="field-select w-44">
+                  <option value="1">1 — Fastest lap</option>
+                  <option value="2">2 — Average lap</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-5">
+            <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Pit Window &amp; Stints <span class="normal-case text-gray-600 font-normal ml-1">(-1 = disabled)</span></h3>
+            <div class="grid grid-cols-3 gap-4">
+              <div>
+                <label class="field-label">Pit Window (sec)</label>
+                <input type="number" x-model.number="cfg.eventRules.pitWindowLengthSec" class="field-input">
+              </div>
+              <div>
+                <label class="field-label">Driver Stint (sec)</label>
+                <input type="number" x-model.number="cfg.eventRules.driverStintTimeSec" class="field-input">
+              </div>
+              <div>
+                <label class="field-label">Max Total Drive (sec)</label>
+                <input type="number" x-model.number="cfg.eventRules.maxTotalDrivingTime" class="field-input">
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-4">
+            <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Mandatory Pitstops</h3>
+            <div class="flex items-center gap-6">
+              <div>
+                <label class="field-label">Mandatory Stop Count</label>
+                <input type="number" x-model.number="cfg.eventRules.mandatoryPitstopCount" min="0" class="field-input w-24">
+              </div>
+              <div>
+                <label class="field-label">Tyre Set Count</label>
+                <input type="number" x-model.number="cfg.eventRules.tyreSetCount" min="1" max="50" class="field-input w-24">
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-4 pt-2">
+              <label class="flex items-center gap-3 cursor-pointer select-none">
+                <input type="checkbox" x-model="cfg.eventRules.isRefuellingAllowedInRace">
+                <span class="text-sm text-white">Refuelling Allowed in Race</span>
+              </label>
+              <label class="flex items-center gap-3 cursor-pointer select-none">
+                <input type="checkbox" x-model="cfg.eventRules.isRefuellingTimeFixed">
+                <span class="text-sm text-white">Fixed Refuelling Time</span>
+              </label>
+              <label class="flex items-center gap-3 cursor-pointer select-none">
+                <input type="checkbox" x-model="cfg.eventRules.isMandatoryPitstopRefuellingRequired">
+                <span class="text-sm text-white">Mandatory Stop Requires Refuelling</span>
+              </label>
+              <label class="flex items-center gap-3 cursor-pointer select-none">
+                <input type="checkbox" x-model="cfg.eventRules.isMandatoryPitstopTyreChangeRequired">
+                <span class="text-sm text-white">Mandatory Stop Requires Tyre Change</span>
+              </label>
+              <label class="flex items-center gap-3 cursor-pointer select-none">
+                <input type="checkbox" x-model="cfg.eventRules.isMandatoryPitstopSwapDriverRequired">
+                <span class="text-sm text-white">Mandatory Stop Requires Driver Swap</span>
+              </label>
+            </div>
+          </div>
+
+        </div>
+      </template>
+      <div x-show="!cfg.eventRules" class="text-gray-500 text-sm">Loading…</div>
+    </section>
+
+    <!-- ================================================================ -->
+    <!-- ASSISTS TAB                                                        -->
+    <!-- ================================================================ -->
+    <section x-show="tab === 'assists'">
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-lg font-semibold text-white">Assist Rules</h2>
+        <button @click="saveConfig('assistRules')" :disabled="saving.assistRules"
+          class="px-5 py-2 bg-[#e20613] hover:bg-red-600 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors">
+          <span x-text="saving.assistRules ? 'Saving…' : 'Save'"></span>
+        </button>
+      </div>
+      <template x-if="cfg.assistRules">
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl divide-y divide-gray-800">
+
+          <div class="p-6">
+            <label class="field-label">Max Stability Control Level — <span class="text-[#e20613]" x-text="cfg.assistRules.stabilityControlLevelMax + '%'"></span></label>
+            <input type="range" x-model.number="cfg.assistRules.stabilityControlLevelMax" min="0" max="100"
+              class="w-full max-w-xs mt-2">
+            <p class="field-hint">0 = disabled for all players · 100 = unrestricted</p>
+          </div>
+
+          <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-5">
+            <template x-for="assist in assistToggles" :key="assist.key">
+              <label class="flex items-center justify-between gap-4 cursor-pointer select-none">
+                <div>
+                  <span class="text-sm text-white" x-text="assist.label"></span>
+                  <p class="text-xs text-gray-500" x-text="assist.hint"></p>
+                </div>
+                <!-- Toggle: field = 1 means DISABLED; switch ON = assist allowed (value 0) -->
+                <div class="relative flex-shrink-0">
+                  <input type="checkbox"
+                    :checked="cfg.assistRules[assist.key] === 0"
+                    @change="cfg.assistRules[assist.key] = $event.target.checked ? 0 : 1"
+                    class="sr-only peer">
+                  <div class="w-10 h-5 bg-gray-700 peer-checked:bg-[#e20613] rounded-full transition-colors"></div>
+                  <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5 shadow"></div>
+                </div>
+              </label>
+            </template>
+          </div>
+
+        </div>
+      </template>
+      <div x-show="!cfg.assistRules" class="text-gray-500 text-sm">Loading…</div>
+    </section>
+
+    <!-- ================================================================ -->
+    <!-- CONSOLE TAB                                                        -->
+    <!-- ================================================================ -->
+    <section x-show="tab === 'console'">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-semibold text-white">Server Console</h2>
+        <div class="flex items-center gap-4">
+          <span class="text-xs flex items-center gap-1.5"
+            :class="wsConnected ? 'text-[#e20613]' : 'text-gray-500'">
+            <span class="w-1.5 h-1.5 rounded-full" :class="wsConnected ? 'bg-[#e20613] animate-pulse' : 'bg-gray-600'"></span>
+            <span x-text="wsConnected ? 'Live' : 'Disconnected'"></span>
+          </span>
+          <label class="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none">
+            <input type="checkbox" x-model="autoScroll">
+            Auto-scroll
+          </label>
+          <button @click="consoleLogs = []" class="text-xs text-gray-500 hover:text-gray-300 transition">
+            Clear
+          </button>
+        </div>
+      </div>
+      <div class="bg-black border border-gray-800 rounded-xl p-4 h-[60vh] overflow-y-auto console-output text-xs text-[#e20613] leading-5"
+        x-ref="consoleEl">
+        <template x-for="(line, i) in consoleLogs" :key="i">
+          <div x-text="line" class="whitespace-pre-wrap break-all"></div>
+        </template>
+        <div x-show="consoleLogs.length === 0" class="text-gray-700 italic">
+          Waiting for server output…
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script>
+    const TRACKS = [
+      {id:'barcelona',       name:'Barcelona'},
+      {id:'brands_hatch',    name:'Brands Hatch'},
+      {id:'donington',       name:'Donington Park'},
+      {id:'hockenheim',      name:'Hockenheim'},
+      {id:'hungaroring',     name:'Hungaroring'},
+      {id:'imola',           name:'Imola'},
+      {id:'indianapolis',    name:'Indianapolis'},
+      {id:'kyalami',         name:'Kyalami'},
+      {id:'laguna_seca',     name:'Laguna Seca'},
+      {id:'misano',          name:'Misano'},
+      {id:'monza',           name:'Monza'},
+      {id:'mount_panorama',  name:'Mount Panorama'},
+      {id:'nordschleife',    name:'Nordschleife'},
+      {id:'nurburgring',     name:'Nürburgring GP'},
+      {id:'nurburgring_24h', name:'Nürburgring 24h'},
+      {id:'oulton_park',     name:'Oulton Park'},
+      {id:'paul_ricard',     name:'Paul Ricard'},
+      {id:'red_bull_ring',   name:'Red Bull Ring'},
+      {id:'silverstone',     name:'Silverstone'},
+      {id:'snetterton',      name:'Snetterton'},
+      {id:'spa',             name:'Spa-Francorchamps'},
+      {id:'suzuka',          name:'Suzuka'},
+      {id:'valencia',        name:'Valencia'},
+      {id:'watkins_glen',    name:'Watkins Glen'},
+      {id:'zandvoort',       name:'Zandvoort'},
+      {id:'zolder',          name:'Zolder'},
+    ];
+
+    const ASSIST_TOGGLES = [
+      {key:'disableIdealLine',       label:'Ideal Line',        hint:'Racing line overlay'},
+      {key:'disableAutosteer',       label:'Auto Steer',        hint:'Automatic steering assistance'},
+      {key:'disableAutoPitLimiter',  label:'Auto Pit Limiter',  hint:'Automatic speed limiter in pit lane'},
+      {key:'disableAutoGear',        label:'Auto Gear',         hint:'Automatic gear changes'},
+      {key:'disableAutoClutch',      label:'Auto Clutch',       hint:'Automatic clutch control'},
+      {key:'disableAutoEngineStart', label:'Auto Engine Start', hint:'Automatic engine start on race begin'},
+      {key:'disableAutoWiper',       label:'Auto Wiper',        hint:'Automatic windscreen wipers'},
+      {key:'disableAutoLights',      label:'Auto Lights',       hint:'Automatic headlights'},
+    ];
+
+    function dashboard() {
+      return {
+        tab: 'dashboard',
+        tabs: [
+          {id:'dashboard', label:'Dashboard'},
+          {id:'network',   label:'Network'},
+          {id:'settings',  label:'Settings'},
+          {id:'event',     label:'Event'},
+          {id:'rules',     label:'Rules'},
+          {id:'assists',   label:'Assists'},
+          {id:'console',   label:'Console'},
+        ],
+        tracks: TRACKS,
+        assistToggles: ASSIST_TOGGLES,
+
+        server: {running: false, pid: null, uptime: 0, adopted: false},
+        actionLoading: false,
+
+        cfg: {configuration:null, settings:null, event:null, eventRules:null, assistRules:null},
+        saving: { configuration: false, settings: false, event: false, eventRules: false, assistRules: false },
+
+        consoleLogs: [],
+        ws: null,
+        wsConnected: false,
+        autoScroll: true,
+
+        toast: {visible: false, type: 'success', message: ''},
+        _toastTimer: null,
+
+        async init() {
+          await Promise.all([
+            this.fetchStatus(),
+            this.loadConfig('configuration'),
+            this.loadConfig('settings'),
+            this.loadConfig('event'),
+            this.loadConfig('eventRules'),
+            this.loadConfig('assistRules'),
+          ]);
+          this.connectConsole();
+          setInterval(() => this.fetchStatus(), 5000);
+        },
+
+        async fetchStatus() {
+          try {
+            const r = await fetch('/api/server/status');
+            if (r.status === 401) { location.href = '/login'; return; }
+            this.server = await r.json();
+          } catch {}
+        },
+
+        async serverAction(action) {
+          this.actionLoading = true;
+          try {
+            const r = await fetch(`/api/server/${action}`, {method: 'POST'});
+            const d = await r.json();
+            await this.fetchStatus();
+            const labels = {start:'Server started', stop:'Server stopped', restart:'Server restarted'};
+            this.showToast('success', d.message || labels[action] || 'Done');
+          } catch (e) {
+            this.showToast('error', 'Action failed: ' + e.message);
+          } finally {
+            this.actionLoading = false;
+          }
+        },
+
+        async loadConfig(name) {
+          try {
+            const r = await fetch(`/api/config/${name}`);
+            if (r.ok) this.cfg[name] = await r.json();
+          } catch {}
+        },
+
+        async saveConfig(name) {
+          this.saving[name] = true;
+          try {
+            const r = await fetch(`/api/config/${name}`, {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify(this.cfg[name]),
+            });
+            if (r.ok) {
+              this.showToast('success', `${name}.json saved`);
+            } else {
+              const d = await r.json().catch(() => ({}));
+              this.showToast('error', d.detail || 'Save failed');
+            }
+          } catch (e) {
+            this.showToast('error', 'Save failed: ' + e.message);
+          } finally {
+            this.saving[name] = false;
+          }
+        },
+
+        addSession() {
+          if (!this.cfg.event) return;
+          this.cfg.event.sessions.push({
+            sessionType: 'P', hourOfDay: 12, dayOfWeekend: 2,
+            timeMultiplier: 1, sessionDurationMinutes: 60,
+          });
+        },
+
+        connectConsole() {
+          const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+          this.ws = new WebSocket(`${proto}://${location.host}/ws/logs`);
+          this.ws.onopen  = () => { this.wsConnected = true; };
+          this.ws.onclose = () => { this.wsConnected = false; setTimeout(() => this.connectConsole(), 3000); };
+          this.ws.onerror = () => { this.wsConnected = false; };
+          this.ws.onmessage = (e) => {
+            if (!e.data) return;
+            const lines = e.data.split('\n');
+            for (const l of lines) { if (l !== '') this.consoleLogs.push(l); }
+            if (this.consoleLogs.length > 2000) this.consoleLogs.splice(0, this.consoleLogs.length - 2000);
+            if (this.autoScroll && this.$refs.consoleEl) {
+              this.$nextTick(() => { this.$refs.consoleEl.scrollTop = this.$refs.consoleEl.scrollHeight; });
+            }
+          };
+        },
+
+        trackName(id) {
+          return (TRACKS.find(t => t.id === id) || {name: id || '—'}).name;
+        },
+
+        formatUptime(sec) {
+          if (!sec) return '0s';
+          const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+          if (h > 0) return `${h}h ${m}m`;
+          if (m > 0) return `${m}m ${s}s`;
+          return `${s}s`;
+        },
+
+        showToast(type, message) {
+          if (this._toastTimer) clearTimeout(this._toastTimer);
+          this.toast = {visible: true, type, message};
+          this._toastTimer = setTimeout(() => { this.toast.visible = false; }, 3500);
+        },
+      };
+    }
+  </script>
+
+</body>
+</html>
