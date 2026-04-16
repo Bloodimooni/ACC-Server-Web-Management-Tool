@@ -14,19 +14,25 @@ A simple web-based management dashboard for **Assetto Corsa Competizione** serve
 ### Prerequisites
 - Python 3.7 or higher
 - An Assetto Corsa Competizione server installation
-- Modern web browser
+- Requirements for the code are installed: 
+```bash
+pip install -r requirements.txt
+```
 
 ### Pull from Git
 - git clone https://github.com/Bloodimooni/ACC-Server-Web-Management-Tool
 - copy env.example to .env
 - edit .env contents to fit your setup
 
-### 
-
 ### Permissions
 - since ACC is only available on Windows, make sure the python script can access the .exe file of the server
 
 ## Usage
+
+### Create a local User:
+```pyhton
+python main.py adduser username
+```
 
 ### Starting the Dashboard
 
@@ -36,15 +42,15 @@ python main.py
 ```
 
 The dashboard will be available at the configured address in your `.env` file.
+Default: http://localhost:8080
 
 ### Managing Your Server
 
 Once logged in, you can:
-- View real-time server statistics
 - Configure race settings (track, weather, car classes, etc.)
 - Manage server parameters and restrictions
-- Monitor active sessions and player count
-- Restart or shutdown the server safely
+- Monitor active sessions using the Console output
+- Restart or shutdown the server
 
 ## Configuration
 
@@ -52,7 +58,7 @@ Edit the `.env` file to customize:
 - Server connection details
 - Web dashboard port
 - API endpoints
-- Authentication credentials
+- Setup OAuth + PKCE provider for login
 
 Refer to `.env.example` for all available configuration options.
 
@@ -81,10 +87,9 @@ ACC-Server-Web-Management-Tool/
 - Check `.env` configuration matches your server details
 - Ensure network connectivity between dashboard and server machines
 
-
 ## Contributing
 
-Found a bug or have a feature request? Feel free to open an issue on GitHub!
+Found a bug or have a feature request? Feel free to open an issue!
 
 
 
